@@ -11,6 +11,8 @@ import android.view.Window;
 import android.widget.AdapterView;
 import android.widget.Spinner;
 import android.widget.TextView;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 
 import net.pp3345.ykdroid.yubikey.Slot;
 import net.pp3345.ykdroid.yubikey.UsbYubiKey;
@@ -44,11 +46,11 @@ public class ChallengeResponseActivity extends Activity implements ConnectionMan
     protected void onCreate(final Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        this.connectionManager = new ConnectionManager(this);
-        this.slotPreferenceManager = new SlotPreferenceManager(this);
+        // this.connectionManager = new ConnectionManager(this);
+        // this.slotPreferenceManager = new SlotPreferenceManager(this);
 
         this.requestWindowFeature(Window.FEATURE_NO_TITLE);
-        this.setContentView(R.layout.activity_challenge_response);
+        // this.setContentView(R.layout.activity_challenge_response);
 
         this.challenge = this.getIntent().getByteArrayExtra("challenge");
         if (this.challenge == null || this.challenge.length == 0) {
@@ -56,40 +58,52 @@ public class ChallengeResponseActivity extends Activity implements ConnectionMan
             ((TextView) ChallengeResponseActivity.this.findViewById(R.id.info)).setText(R.string.invalid_challenge);
             return;
         }
+        // fake yubikey
+        byte[] hash = calculateHMACSHA1("462c2801b259a262c4a6235e69e41c95227758cb", // your secret key here
+                ChallengeResponseActivity.this.trimByteArray(ChallengeResponseActivity.this.challenge));
+        final Intent result = new Intent();
+        result.putExtra("response", hash);
+        ChallengeResponseActivity.this.setResult(RESULT_OK, result);
+        ChallengeResponseActivity.this.finish();
+        return;
 
-        switch (this.connectionManager.getSupportedConnectionMethods()) {
-            case ConnectionManager.CONNECTION_METHOD_USB | ConnectionManager.CONNECTION_METHOD_NFC:
-                ((TextView) this.findViewById(R.id.info)).setText(R.string.attach_or_swipe_yubikey);
-                break;
-            case ConnectionManager.CONNECTION_METHOD_USB:
-                ((TextView) this.findViewById(R.id.info)).setText(R.string.attach_yubikey);
-                break;
-            case ConnectionManager.CONNECTION_METHOD_NFC:
-                ((TextView) this.findViewById(R.id.info)).setText(R.string.swipe_yubikey);
-                break;
-            default:
-                ((TextView) this.findViewById(R.id.info)).setText(R.string.no_supported_connection_method);
-                this.showError();
-                return;
-        }
+        // switch (this.connectionManager.getSupportedConnectionMethods()) {
+        // case ConnectionManager.CONNECTION_METHOD_USB |
+        // ConnectionManager.CONNECTION_METHOD_NFC:
+        // ((TextView)
+        // this.findViewById(R.id.info)).setText(R.string.attach_or_swipe_yubikey);
+        // break;
+        // case ConnectionManager.CONNECTION_METHOD_USB:
+        // ((TextView) this.findViewById(R.id.info)).setText(R.string.attach_yubikey);
+        // break;
+        // case ConnectionManager.CONNECTION_METHOD_NFC:
+        // ((TextView) this.findViewById(R.id.info)).setText(R.string.swipe_yubikey);
+        // break;
+        // default:
+        // ((TextView)
+        // this.findViewById(R.id.info)).setText(R.string.no_supported_connection_method);
+        // this.showError();
+        // return;
+        // }
 
-        this.purpose = this.getIntent().getStringExtra("purpose");
-        this.selectedSlot = this.slotPreferenceManager.getPreferredSlot(this.purpose, Slot.CHALLENGE_HMAC_1);
+        // this.purpose = this.getIntent().getStringExtra("purpose");
+        // this.selectedSlot = this.slotPreferenceManager.getPreferredSlot(this.purpose,
+        // Slot.CHALLENGE_HMAC_1);
 
-        final Spinner slotSelection = this.findViewById(R.id.slotSelection);
+        // final Spinner slotSelection = this.findViewById(R.id.slotSelection);
 
-        switch (this.selectedSlot) {
-            case CHALLENGE_HMAC_1:
-                slotSelection.setSelection(0);
-                break;
-            case CHALLENGE_HMAC_2:
-                slotSelection.setSelection(1);
-                break;
-        }
+        // switch (this.selectedSlot) {
+        // case CHALLENGE_HMAC_1:
+        // slotSelection.setSelection(0);
+        // break;
+        // case CHALLENGE_HMAC_2:
+        // slotSelection.setSelection(1);
+        // break;
+        // }
 
-        slotSelection.setOnItemSelectedListener(this);
+        // slotSelection.setOnItemSelectedListener(this);
 
-        this.connectionManager.waitForYubiKey(this);
+        // this.connectionManager.waitForYubiKey(this);
     }
 
     @Override
@@ -120,7 +134,6 @@ public class ChallengeResponseActivity extends Activity implements ConnectionMan
                 if (this.executionException == null) {
                     ChallengeResponseActivity.this.slotPreferenceManager.setPreferredSlot(
                             ChallengeResponseActivity.this.purpose, ChallengeResponseActivity.this.selectedSlot);
-
                     final Intent result = new Intent();
                     result.putExtra("response", bytes);
                     ChallengeResponseActivity.this.setResult(RESULT_OK, result);
@@ -175,6 +188,65 @@ public class ChallengeResponseActivity extends Activity implements ConnectionMan
     @Override
     protected void onNewIntent(final Intent intent) {
         // This is kind of ugly but Android doesn't leave us any other choice
-        this.connectionManager.onReceive(this, intent);
+        // this.connectionManager.onReceive(this, intent);
     }
+
+    public String bytesToHex(byte[] bytes) {
+        StringBuilder hexString = new StringBuilder();
+        for (byte b : bytes) {
+            String hex = Integer.toHexString(0xFF & b);
+            if (hex.length() == 1) {
+                hexString.append('0');
+            }
+            hexString.append(hex);
+        }
+        return hexString.toString();
+    }
+
+    public byte[] hexStringToByteArray(String s) {
+        int len = s.length();
+        byte[] data = new byte[len / 2];
+        for (int i = 0; i < len; i += 2) {
+            data[i / 2] = (byte) ((Character.digit(s.charAt(i), 16) << 4)
+                    + Character.digit(s.charAt(i + 1), 16));
+        }
+        return data;
+    }
+
+    public byte[] calculateHMACSHA1(String key, byte[] data) {
+        try {
+            byte[] keyBytes = hexStringToByteArray(key);
+            Mac mac = Mac.getInstance("HmacSHA1");
+            SecretKeySpec secretKeySpec = new SecretKeySpec(keyBytes, "HmacSHA1");
+            mac.init(secretKeySpec);
+            return mac.doFinal(data);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    public byte[] trimByteArray(byte[] input) {
+        if (input == null || input.length == 0)
+            return new byte[0];
+
+        // 读取最后一个字节
+        byte padValue = input[input.length - 1];
+        int lastIndex = input.length;
+
+        // 查找最后一个不同于padValue的位置
+        for (int i = input.length - 1; i >= 0; i--) {
+            if (input[i] != padValue) {
+                lastIndex = i + 1;
+                break;
+            }
+        }
+
+        // 创建一个新的数组来存储有效数据
+        byte[] result = new byte[lastIndex];
+        System.arraycopy(input, 0, result, 0, lastIndex);
+
+        return result;
+    }
+
 }
