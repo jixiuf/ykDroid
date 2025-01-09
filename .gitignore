@@ -168,3 +168,8 @@ gradle-app.setting
 # gradle/wrapper/gradle-wrapper.properties
 
 YubiDroid.ai
+/.project
+/.settings/
+/app/.project
+/app/.classpath
+/app/.settings/
